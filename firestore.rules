@@ -1,0 +1,69 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // 2. Validation Blueprints
+    function isValidTask(data) {
+      return data.keys().hasAll(['title', 'priority', 'isCompleted', 'createdAt', 'userId', 'dueDate'])
+        && data.title is string && data.title.size() <= 500
+        && data.description is string && data.description.size() <= 2000
+        && data.priority in ['Low', 'Medium', 'High']
+        && data.isCompleted is bool
+        && data.dueDate is timestamp
+        && data.userId == request.auth.uid;
+    }
+
+    // --- Collections ---
+
+    match /tasks/{taskId} {
+      // 3. Path Variable Hardening
+      allow get: if isSignedIn() && isOwner(existing().userId) && isValidId(taskId);
+      
+      // 8. Secure List Queries
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+
+      allow create: if isSignedIn() 
+        && isValidTask(incoming())
+        && incoming().createdAt == request.time
+        && isValidId(taskId);
+
+      // 4. Tiered Identity Logic
+      allow update: if isSignedIn() 
+        && isOwner(existing().userId)
+        && isValidTask(incoming())
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          // Action: Toggle completion or edit fields
+          incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'priority', 'dueDate', 'isCompleted', 'updatedAt'])
+        );
+
+      allow delete: if isSignedIn() && isOwner(existing().userId);
+    }
+  }
+}

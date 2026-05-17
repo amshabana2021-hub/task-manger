@@ -1,0 +1,8 @@
+{
+  "name": "Taskly",
+  "description": "A clean and efficient personal task manager with Firebase authentication and real-time task tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
